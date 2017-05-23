@@ -35,3 +35,34 @@ func TestGetInfo(t *testing.T) {
 	}
 
 }
+
+func TestNewRing(t *testing.T) {
+	ring := NewHashRing(500)
+
+	ring.AddNode("192.168.3.103:11211",2).
+		AddNode("192.168.3.104:11211",1).
+		AddNode("192.168.3.105:11211",1).
+		AddNode("192.168.3.106:11211",1).
+		AddNode("192.168.3.107:11211",5).
+		Generate()
+
+	m := make(map[string]int)
+	for i := 0; i < 1e6; i++ {
+		m[ring.GetNode("test value"+strconv.FormatUint(uint64(i), 10) )]++
+	}
+
+	for k,_ := range ring.weights {
+		fmt.Println((k), m[k])
+	}
+}
+
+
+
+
+
+
+
+
+
+
+

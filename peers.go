@@ -30,6 +30,8 @@ func (c *MemcachedPeer) Freed(conn *Conn) {
 		conn.Close()
 		return
 	}
+	conn.SetDeadline(time.Time{})
+	conn.SetWriteDeadline(time.Time{})
 	c.pool <- conn
 }
 
@@ -50,10 +52,12 @@ func (c *MemcachedPeer) getFreeConn(timeout time.Duration) *Conn {
 				}
 				interval --
 			}
+			//如果连续重试多次都失败，标识当前服务可能存在故障。
 			if err != nil {
 				panic(err)
 			}
 		}
+
 		conn := NewConn(nc)
 
 		c.Freed(conn)
@@ -74,7 +78,7 @@ func (c *MemcachedPeer) InitPeer(maxConnection, minConnection int,timeout time.D
 	}
 	go func() {
 		if c.min > 0 {
-			for i := 0; i < c.min ;i ++ {
+			for i := 0; i <= c.min ;i ++ {
 				nc,err := net.DialTimeout(c.addr.Network(),c.addr.String(),timeout)
 				if err != nil {
 					panic(err)
