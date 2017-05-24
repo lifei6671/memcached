@@ -12,6 +12,5 @@ func TestMemcachedPeer_InitPeer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client.InitMemcachedClient()
 
 }

@@ -5,6 +5,7 @@ import (
 	"math"
 	"crypto/sha1"
 	"strconv"
+	"sync"
 )
 
 const DefaultReplicas = 500
@@ -26,6 +27,7 @@ type HashRing struct {
 	replicas int
 	weights map[string]int
 	nodes nodeList
+	mux sync.Mutex
 }
 
 func NewHashRing(replicas int) *HashRing {
@@ -35,17 +37,22 @@ func NewHashRing(replicas int) *HashRing {
 	h := &HashRing{
 		replicas : replicas,
 		weights:     make(map[string]int),
+		mux : sync.Mutex{},
 	}
 	return h
 }
 
 func (h *HashRing) AddNode(key string,weight int) *HashRing {
+	h.mux.Lock()
 	h.weights[key] = weight
+	h.mux.Unlock()
 	return h
 }
 
 func (h *HashRing) DeleteNode(key string) *HashRing {
+	h.mux.Lock()
 	delete(h.weights,key)
+	h.mux.Unlock()
 	return h
 }
 
@@ -69,6 +76,8 @@ func (h *HashRing) GetNode(key string) string {
 
 func (h *HashRing) Generate() {
 	totalWeight := 0
+	h.mux.Lock()
+	defer h.mux.Unlock()
 
 	//计算总的需要创建的节点
 	for _,w := range h.weights {

@@ -6,19 +6,19 @@ type Entry struct {
 	//内容
 	Value []byte
 	//标识
-	Flags uint32
+	Flags uint16
 	//有效期
 	Expiration int32
-	casid      uint64
+	CasId      uint64
 }
 
-func NewEntry(key string, b []byte, flag uint32, expire int32, casid uint64) *Entry {
+func NewEntry(key string, b []byte, flag uint16, expire int32, casid uint64) *Entry {
 	return &Entry{
 		Key:        key,
 		Value:      b,
 		Flags:      flag,
 		Expiration: expire,
-		casid:      casid,
+		CasId:      casid,
 	}
 }
 
