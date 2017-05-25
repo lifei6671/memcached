@@ -32,6 +32,7 @@ if err != nil {
 client.AddServer("192.168.3.103:11211",1)
 client.AddServer("192.168.3.105:11211",1)
 client.AddServer("192.168.3.106:11211",1)
+client.Init()
 
 b,err := client.Get("ReceiveTimeout")
 if err != nil {
