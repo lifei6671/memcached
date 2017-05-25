@@ -15,10 +15,13 @@ import (
 
 //https://github.com/go-redis/redis/blob/master/internal/pool/pool.go
 
+//默认最大连接池数量.
 const MAX_POOL_SIZE = 2000
+
+//默认的最小活动连接池数量.
 const MIN_POOL_SIZE = 5
 
-//默认的虚拟节点数量
+//默认的虚拟节点数量.
 const VIRTUAL_SIZE = 500
 
 var (
@@ -46,7 +49,7 @@ type MemcachedClient struct {
 	//服务映射.
 	peers map[string]*MemcachedPeer
 	//故障服务列表.
-	malfunction map[string]*MemcachedPeer
+	malfunction map[net.Addr]int
 	//读超时时间.
 	readTimeout time.Duration
 	//写超时时间.
@@ -64,6 +67,7 @@ type MemcachedClient struct {
 	idleTimeout          time.Duration
 }
 
+// NewMemcachedClient 创建一个 Memcache 客户端对象.
 func NewMemcachedClient(servers ...string) *MemcachedClient {
 	addrs := make(map[string]*MemcachedPeer, len(servers))
 	ring := NewHashRing(VIRTUAL_SIZE)
@@ -88,7 +92,7 @@ func NewMemcachedClient(servers ...string) *MemcachedClient {
 	client := &MemcachedClient{
 		mux:               sync.RWMutex{},
 		peers:             addrs,
-		malfunction: 	   make(map[string]*MemcachedPeer, 0),
+		malfunction: 	   make(map[net.Addr]int, 0),
 		ring:              ring,
 		readTimeout:       time.Second * 30,
 		writeTimeout:      time.Second * 30,
@@ -102,7 +106,7 @@ func NewMemcachedClient(servers ...string) *MemcachedClient {
 	return client
 }
 
-//新增一个 Memcached 服务器.
+// AddServer 新增一个 Memcached 服务器.
 func (c *MemcachedClient) AddServer(server string, weight int) error {
 	addr, err := ResolveMemcachedAddr(server)
 
@@ -127,47 +131,75 @@ func (c *MemcachedClient) AddServer(server string, weight int) error {
 	return nil
 }
 
-//设置读超时时间.
-func (c *MemcachedClient) SetReadTimeout(readTimeout time.Duration) {
+// SetReadTimeout 设置读超时时间.
+//
+// 该值将用于从 Memecache 服务器读取数据时的超时限制，默认为 30 秒.
+func (c *MemcachedClient) SetReadTimeout(readTimeout time.Duration) *MemcachedClient {
 	c.readTimeout = readTimeout
+	return c
 }
 
-//设置写超时时间.
-func (c *MemcachedClient) SetWriteTimeout(writeTimeout time.Duration) {
+// SetWriteTimeout 设置写超时时间.
+
+// 该值用于将数据写入到远程 memcache 服务器时的超时限制，默认为 30 秒 .
+func (c *MemcachedClient) SetWriteTimeout(writeTimeout time.Duration) *MemcachedClient {
 	c.writeTimeout = writeTimeout
+	return c
 }
 
-//设置连接池中最大空闲的连接数量.
-func (c *MemcachedClient) SetMaxIdleConnection(n int) {
+// SetMaxIdleConnection 设置连接池中最大空闲的连接数量.
+//
+// 该值用于设置连接池中连接的最大数量.
+func (c *MemcachedClient) SetMaxIdleConnection(n int) *MemcachedClient {
 	c.maxIdleConnections = n
+	return c
 }
 
-//设置最大活动连接数.
-func (c *MemcachedClient) SetMaxActiveConnection(n int) {
+// SetMaxActiveConnection 设置最大活动连接数.
+//
+// 该值用于设置连接池中最大活跃的连接数量.
+func (c *MemcachedClient) SetMaxActiveConnection(n int) *MemcachedClient {
 	c.maxActiveConnections = n
+	return c
 }
 
-//设置连接休眠时间检查间隔.
-func (c *MemcachedClient) SetIdleFrequency(frequency time.Duration) {
+// SetIdleFrequency 设置连接休眠时间检查间隔.
+//
+// 该值用于定时检查连接池中连接的生存时间，如果设置了该值，系统将启动一个 goroutine 检查连接池中连接的存在时间，如果连接生存时间超过了 IdleTimeout 的限制，将会关闭连接，并移除连接池.
+func (c *MemcachedClient) SetIdleFrequency(frequency time.Duration) *MemcachedClient {
 	c.idleFrequency = frequency
+	return c
 }
 
-//设置连接超时.
-func (c *MemcachedClient) SetTimeout(timeout time.Duration) {
+// SetTimeout 设置连接超时.
+//
+// 用于连接超时时间，如果设置了该值，将会用 net.DialTimeout 发起远程连接.
+func (c *MemcachedClient) SetTimeout(timeout time.Duration) *MemcachedClient {
 	c.timeout = timeout
+	return c
 }
 
-//设置连接空闲时间间隔.
-func (c *MemcachedClient) SetIdleTimeout(timeout time.Duration) {
+// SetIdleTimeout 设置连接空闲时间间隔.
+//
+// 指示一个连接空闲的最大时间.
+func (c *MemcachedClient) SetIdleTimeout(timeout time.Duration) *MemcachedClient {
 	c.idleTimeout = timeout
+	return c
 }
 
-func (c *MemcachedClient) SetServerFrequency(timeout time.Duration) {
+// SetServerFrequency 设置服务器宕机的的检查频率.
+//
+// 该值用于定期检查服务器宕机状态，如果该值不为 0 ，系统将启动一个 goroutine 定时检查服务器的宕机状态，并标记为不可用，
+// 此时读取和写入缓存不会分配到此宕机服务器，该服务器会在下一次检查时检查恢复状态.
+func (c *MemcachedClient) SetServerFrequency(timeout time.Duration) *MemcachedClient {
 	c.peerFrequency = timeout
+	return c
 }
 
-//使配置生效，如果变更了配置，需要调用该方法才能使已初始化的连接生效.
-func (c *MemcachedClient) Init() {
+// Init 使配置生效，如果变更了配置，需要调用该方法才能使已初始化的连接生效.
+//
+// 用于初始化连接池的参数，如果不调用该方法，所有的设置信息将无法生效.
+func (c *MemcachedClient) Init() *MemcachedClient {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 
@@ -177,6 +209,7 @@ func (c *MemcachedClient) Init() {
 		peer.pool.MaxActiveConnections = c.maxActiveConnections
 		peer.pool.MaxIdleConnections = c.maxIdleConnections
 	}
+	return c
 }
 
 //是否启用压缩.
@@ -199,7 +232,7 @@ func (c *MemcachedClient) InitMemcachedClient() {
 	}
 }
 
-//关闭所有服务的连接，并清空连接池.
+// Close 关闭所有服务的连接，并清空连接池.
 func (c *MemcachedClient) Close() {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -217,7 +250,12 @@ func (c *MemcachedClient) Close() {
 	end.Wait()
 }
 
-//设置.
+// Set 执行 memcache 的 set 命令将指定的值写入缓存中.
+//
+//	key string	键名
+//	v []byte	键值
+//	flag uint16	缓存的标识
+//	expire time.Duration 过期时间
 func (c *MemcachedClient) Set(key string, v []byte, flag uint16, expire time.Duration) error {
 
 	if !checkKey(key) {
@@ -233,7 +271,12 @@ func (c *MemcachedClient) Set(key string, v []byte, flag uint16, expire time.Dur
 	return c.populateAction(entry, "set")
 }
 
-//增加.
+// Add 执行 memcache 的 add 命令将值写入到缓存中.
+//
+//	key string	键名
+//	v []byte	键值
+//	flag uint16	缓存的标识
+//	expire time.Duration 过期时间
 func (c *MemcachedClient) Add(key string, v []byte, flag uint16, expire time.Duration) error {
 	if !checkKey(key) {
 		return ErrKeyTooLong
@@ -248,7 +291,12 @@ func (c *MemcachedClient) Add(key string, v []byte, flag uint16, expire time.Dur
 	return c.populateAction(entry, "add")
 }
 
-//替换.
+// Replace 执行 memcache 的 replace 命令将值写入到缓存中.
+//
+//	key string	键名
+//	v []byte	键值
+//	flag uint16	缓存的标识
+//	expire time.Duration 过期时间
 func (c *MemcachedClient) Replace(key string, v []byte, flag uint16, expire time.Duration) error {
 	if !checkKey(key) {
 		return ErrKeyTooLong
@@ -263,7 +311,9 @@ func (c *MemcachedClient) Replace(key string, v []byte, flag uint16, expire time
 	return c.populateAction(entry, "replace")
 }
 
-//获取指定键的值.
+// Get 执行 memcache 的 gets 命令从 memcache 中读取一个值.
+//
+//	key string	键名
 func (c *MemcachedClient) Get(key string) (*Entry, error) {
 	peer := c.pickServer(key)
 	if peer != nil {
@@ -311,7 +361,9 @@ func (c *MemcachedClient) Get(key string) (*Entry, error) {
 	return nil, ErrNotServer
 }
 
-//删除缓存.
+// Delete 执行 memcache 的 delete 命令删除缓存.
+//
+//	key string	键名
 func (c *MemcachedClient) Delete(key string) error {
 	peer := c.pickServer(key)
 	if peer != nil {
@@ -356,6 +408,7 @@ func (c *MemcachedClient) Delete(key string) error {
 	return ErrNotServer
 }
 
+// Increment 执行 memcache 的 incr 命令增加计数.
 func (c *MemcachedClient) Increment(key string, delta uint64) (uint64, error) {
 	peer := c.pickServer(key)
 
@@ -404,6 +457,7 @@ func (c *MemcachedClient) Increment(key string, delta uint64) (uint64, error) {
 	return 0, ErrNotServer
 }
 
+// Decrement 执行 memcache 的 decr 命令减少计数.
 func (c *MemcachedClient) Decrement(key string, delta uint64) (uint64, error) {
 	peer := c.pickServer(key)
 
@@ -452,6 +506,7 @@ func (c *MemcachedClient) Decrement(key string, delta uint64) (uint64, error) {
 	return 0, ErrNotServer
 }
 
+// Cas 进行CAS操作.
 func (c *MemcachedClient) Cas(key string, v []byte, flag uint16, casid uint64, expire time.Duration) error {
 	if !checkKey(key) {
 		return ErrKeyTooLong
@@ -472,7 +527,7 @@ type MemcachedStateItem struct {
 	Value string
 }
 
-//获取指定 Memcached 的状态.
+// Stats 获取指定 Memcached 的状态.
 func (c *MemcachedClient) Stats(addr string, args ...string) ([]*MemcachedStateItem, error) {
 
 	c.mux.RLock()
@@ -726,50 +781,19 @@ func (c *MemcachedClient) checkPeer() {
 		log.Printf("check the start => %s",time.Now().String())
 		group := &sync.WaitGroup{}
 		c.mux.RLock()
-		if len(c.malfunction) > 0 {
-			//检查故障服务器状态
-			for _, peer := range c.malfunction {
-				addr := peer.addr
-				group.Add(1)
-				go func(addr net.Addr) {
-					defer group.Done()
-					frequency := 3
-					//尝试三次
-					for frequency >= 0 {
-						conn, err := net.DialTimeout(addr.Network(), addr.String(), time.Second * 10);
-						if err != nil {
-							frequency --
-							continue
-						}
-						conn.Close()
-						break
-					}
-					//如果小于0 ，标识
-					if frequency >= 0 {
-						log.Printf("memcache server restore => %s", addr.String())
-						c.mux.Lock()
-						peer := c.malfunction[addr.String()]
-						delete(c.malfunction, addr.String())
-						c.peers[addr.String()] = peer
-						c.ring.AddNode(addr.String(),peer.weight)
-						c.ring.Generate()
-						c.mux.Unlock()
-					}
-				}(addr)
-			}
-		}
+
 		if len(c.peers) > 0 {
 			//检查可用的服务器状态
 			for _, peer := range c.peers {
 				addr := peer.addr
 				c.mux.RUnlock()
 				group.Add(1)
-				go func(addr net.Addr) {
+				go func(addr net.Addr,weight int) {
 					defer group.Done()
 					frequency := 3
 					//尝试三次
 					for frequency >= 0 {
-						conn, err := net.DialTimeout(addr.Network(), addr.String(), time.Second * 10);
+						conn, err := net.DialTimeout(addr.Network(), addr.String(), time.Second * 5);
 						if err != nil {
 							frequency --
 							continue
@@ -781,14 +805,23 @@ func (c *MemcachedClient) checkPeer() {
 					if frequency < 0 {
 						log.Printf("memcache server malfunction => %s", addr.String())
 						c.mux.Lock()
-						peer := c.peers[addr.String()]
-						delete(c.peers, addr.String())
-						c.malfunction[addr.String()] = peer
+						c.malfunction[addr] = weight
 						c.ring.DeleteNode(addr.String())
 						c.ring.Generate()
 						c.mux.Unlock()
+					}else {
+						//判断在故障列表是否存在
+						c.mux.Lock()
+						if _,ok := c.malfunction[addr];ok {
+							log.Printf("memcache server restore => %s", addr.String())
+							delete(c.malfunction,addr)
+							c.ring.AddNode(addr.String(),weight)
+							c.ring.Generate()
+						}
+						c.mux.Unlock()
 					}
-				}(addr)
+
+				}(addr,peer.weight)
 				c.mux.RLock()
 			}
 		}

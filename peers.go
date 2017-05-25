@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-
+// MemcachedPeer struct.
 type MemcachedPeer struct {
 	addr net.Addr
 	hash uint
@@ -34,7 +34,7 @@ func NewMemcachedPeer(addr net.Addr) *MemcachedPeer {
 	return peer
 }
 
-
+// InitPeer 初始化连接池中的连接.
 func (c *MemcachedPeer) InitPeer(timeout time.Duration) {
 
 	if c.pool.MaxActiveConnections > 0 {

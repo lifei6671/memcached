@@ -17,6 +17,7 @@ func checkKey(key string) bool {
 	return true
 }
 
+//解析地址.
 func ResolveMemcachedAddr(addr string) (net.Addr, error) {
 
 	maddr := &MemcachedAddr{}
@@ -40,8 +41,5 @@ func ResolveMemcachedAddr(addr string) (net.Addr, error) {
 
 		return maddr,nil
 	}
-}
 
-func setKetamaNodes(nodes []*MemcachedPeer)  {
-	
 }

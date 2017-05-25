@@ -36,9 +36,10 @@ type idleConn struct {
 	c *Conn
 	t time.Time
 }
-
+// DialFunc 连接池生成的方法.
 type DialFunc func() (*Conn, error)
 
+// NewMemcachedPool 初始化连接池.
 func NewMemcachedPool(dialFunc DialFunc, maxIdle int) *MemcachedPool {
 	pool := &MemcachedPool{
 		Dial:               dialFunc,
@@ -51,7 +52,7 @@ func NewMemcachedPool(dialFunc DialFunc, maxIdle int) *MemcachedPool {
 	return pool
 }
 
-//弹出一个可用的空闲连接.
+// PopFreeConn 弹出一个可用的空闲连接.
 func (c *MemcachedPool) PopFreeConn() (*Conn, error) {
 	c.mux.Lock()
 
@@ -120,7 +121,7 @@ func (c *MemcachedPool) PopFreeConn() (*Conn, error) {
 	}
 }
 
-//将一个连接放入连接池
+// PutFreeConn 将一个连接放入连接池.
 func (c *MemcachedPool) PutFreeConn(conn *Conn) error {
 	c.mux.Lock()
 
@@ -152,7 +153,7 @@ func (c *MemcachedPool) release() {
 	atomic.AddInt32(&(c.currentActiveNumber), -1)
 }
 
-//关闭连接池并释放所有已存在连接.
+// Close 关闭连接池并释放所有已存在连接.
 func (c *MemcachedPool) Close() error {
 	c.mux.Lock()
 	idle := c.idle
@@ -168,7 +169,7 @@ func (c *MemcachedPool) Close() error {
 	return nil
 }
 
-//心跳检测.
+// checkIdleConn 定期检查连接池中的连接是否超过了设定的空闲期限.
 func (c *MemcachedPool) checkIdleConn() {
 	for c.IdleFrequency <= 0 {
 		runtime.Gosched()
